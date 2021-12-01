@@ -1,0 +1,4 @@
+administer dekufinal configuration:
+  title: 'Administer dekufinal configuration'
+  description: 'Optional description.'
+  restrict access: true
