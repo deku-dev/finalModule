@@ -17,14 +17,14 @@ class SettingsForm extends ConfigFormBase {
    *
    * @var int
    */
-  public $countTable = 1;
+  public int $countTable = 1;
 
   /**
    * Count rows in one table.
    *
    * @var int
    */
-  public $countRows = 1;
+  public int $countRows = 1;
 
   /**
    * All headers table with keys.
@@ -67,14 +67,25 @@ class SettingsForm extends ConfigFormBase {
   /**
    * {@inheritdoc}
    */
-  public function getFormId() {
+  public static function create(ContainerInterface $container) {
+    $instance = parent::create($container);
+    $instance->Messenger($container->get('messenger'));
+    return $instance;
+  }
+
+
+
+  /**
+   * {@inheritdoc}
+   */
+  public function getFormId(): string {
     return 'deku_settings';
   }
 
   /**
    * {@inheritdoc}
    */
-  protected function getEditableConfigNames() {
+  protected function getEditableConfigNames(): array {
     return ['deku.settings'];
   }
 
@@ -95,9 +106,7 @@ class SettingsForm extends ConfigFormBase {
       '#value' => $this->t('Add table'),
     ];
 
-
-
-
+    $this->createTable($form, $form_state);
 
     $form['submit'] = [
       '#type' => 'submit',
@@ -110,9 +119,7 @@ class SettingsForm extends ConfigFormBase {
    * {@inheritdoc}
    */
   public function validateForm(array &$form, FormStateInterface $form_state) {
-    foreach () {
-
-    }
+    return $form;
   }
 
   /**
@@ -125,11 +132,11 @@ class SettingsForm extends ConfigFormBase {
         '#type' => 'table',
         '#header' => $this->headersTable,
       ];
-      $this->createYears($i, $form['table-'.], $form_state);
+      $this->createYears($i, $form[$tableKey], $form_state);
     }
   }
 
-  public function addTable(array &$form, FormStateInterface $form_state) {
+  public function addTable(array &$form, FormStateInterface $form_state): array {
     $this->countTable++;
     $form_state->setRebuild();
     return $form;
@@ -137,11 +144,13 @@ class SettingsForm extends ConfigFormBase {
 
   public function createYears(array &$form, FormStateInterface $form_state) {
     for ($i = 0; $i <= $this->countRows; $i++) {
-      $form[$i]['year']['#default_value'] = date('Y') - $i;
+
       foreach ($this->headersTable as $rowKey => $rowName) {
         $form[$i][$rowKey] = [
           '#type' => 'number',
+          '#step' => '0.01',
         ];
+        $form[$i]['year']['#default_value'] = date('Y') - $i;
         if (!isset($this->cellData[$rowKey])) {
           $defaultValue = 0;
           $form[$i][$rowKey] = [
@@ -153,7 +162,7 @@ class SettingsForm extends ConfigFormBase {
     }
   }
 
-  public function addYears(array $form, FormStateInterface $form_state) {
+  public function addYears(array $form, FormStateInterface $form_state): array {
     $this->countRows++;
     $form_state->setRebuild();
     return $form;
@@ -164,8 +173,8 @@ class SettingsForm extends ConfigFormBase {
    */
   public function submitForm(array &$form, FormStateInterface $form_state) {
     $valuesTable = $form_state->getValues();
-    foreach(){
-      foreach ($variable as $key => $value) {
+    foreach($valuesTable as $tableKey => $table){
+      foreach ($table as $key => $row) {
         $q1 = ($row['jan'] + $row['feb'] + $row['mar'] + 1) / 3;
         $q2 = ($row['apr'] + $row['may'] + $row['jun'] + 1) / 3;
         $q3 = ($row['jul'] + $row['aug'] + $row['sep'] + 1) / 3;
@@ -176,10 +185,12 @@ class SettingsForm extends ConfigFormBase {
     $this->config('deku.settings')
       ->set('example', $form_state->getValue('example'))
       ->save();
+    $this->Messenger->addStatus('All cell is valid');
+
 
   }
 
-  public function reloadAjaxTable(array &$form, FormStateInterface $form_state) {
+  public function reloadAjaxTable(array &$form, FormStateInterface $form_state): array {
     return $form;
   }
 
