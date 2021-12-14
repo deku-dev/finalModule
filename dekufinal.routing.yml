@@ -7,9 +7,9 @@ dekufinal.example:
     _permission: 'access content'
 
 dekufinal.settings_form:
-  path: '/admin/config/system/dekufinal'
+  path: '/dekufinal'
   defaults:
     _title: 'DekuFinal settings'
     _form: 'Drupal\dekufinal\Form\SettingsForm'
   requirements:
-    _permission: 'administer dekufinal configuration'
+    _permission: 'access content'
