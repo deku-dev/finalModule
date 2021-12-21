@@ -4,26 +4,29 @@ namespace Drupal\dekufinal\Form;
 
 use Drupal\Core\Form\FormStateInterface;
 use Drupal\Core\Form\FormBase;
+use Drupal\Core\Form\ConfigFormBase;
 use Symfony\Component\DependencyInjection\ContainerInterface;
+use Drupal\Core\Ajax\AjaxResponse;
+use Drupal\Core\Ajax\HtmlCommand;
 
 /**
  * Configure deku settings for this site.
  */
-class SettingsForm extends FormBase {
+class SettingsForm extends ConfigFormBase {
 
   /**
    * Count all created table on the page.
    *
    * @var int
    */
-  static int $countTable = 1;
+  public int $countTable = 0;
 
   /**
    * Count rows in one table.
    *
    * @var int
    */
-  static int $countRows = 1;
+  public int $countRows = 1;
 
   /**
    * All headers table with keys.
@@ -31,6 +34,13 @@ class SettingsForm extends FormBase {
    * @var string[]
    */
   protected array $headersTable;
+
+  /**
+   * Array for cell with start data and end data.
+   *
+   * @var float[]
+   */
+  private array $arrData;
 
   /**
    * Data entry cells.
@@ -96,31 +106,54 @@ class SettingsForm extends FormBase {
   /**
    * {@inheritdoc}
    */
-  public function buildForm(array $form, FormStateInterface $form_state) {
+  protected function getEditableConfigNames() {
+    return [
+      'your_module.settings',
+    ];
+  }
 
-    // $form['#prefix'] = '<div id="deku-form">';
-    // $form['#suffix'] = '</div>';
+  /**
+   * {@inheritdoc}
+   */
+  public function buildForm(array $form, FormStateInterface $form_state) {
+    $form['#prefix'] = '<div id="deku-form">';
+    $form['#suffix'] = '</div>';
+
+    $form['result'] = [
+      '#markup' => '<div id="deku-result"></div>'
+    ];
+
+    $form['rowCount'] = [
+      '#type' => 'hidden',
+      '#value' => $this->countRows,
+    ];
+    $form['tableCount'] = [
+      '#type' => 'hidden',
+      '#value' => $this->countTable,
+    ];
 
     $form['addYear'] = [
       '#type' => 'submit',
       '#value' => $this->t('Add year'),
+      '#submit' => ['::addYears'],
       '#ajax' => [
-        'callback' => '::addYears',
+        'callback' => '::reloadAjaxTable',
         'wrapper' => 'deku-form',
       ]
     ];
     $form['addTable'] = [
       '#type' => 'submit',
       '#value' => $this->t('Add table'),
+      '#submit' => ['::addTable'],
       '#ajax' => [
-        'callback' => '::addTable',
+        'callback' => '::reloadAjaxTable',
         'wrapper' => 'deku-form',
       ]
     ];
 
-    $form['result'] = [
-      '#markup' => '<div id="deku-form"></div>'
-    ];
+
+    // Set value to the variables.
+    // $this->generateHeaderTable();
 
     $this->createTable($form, $form_state);
 
@@ -128,7 +161,7 @@ class SettingsForm extends FormBase {
       '#type' => 'submit',
       '#value' => $this->t('Submit'),
       '#ajax' => [
-        'callback' => '::reloadAjaxTable',
+        'callback' => '::validateCell',
         'wrapper' => 'deku-form',
       ]
     ];
@@ -140,62 +173,109 @@ class SettingsForm extends FormBase {
    * {@inheritdoc}
    */
   public function validateForm(array &$form, FormStateInterface $form_state) {
-    for ($i = 1; $i <= $this->countTable; $i++) {
-      for ($i = 1; $i <= $this->countRows; $i++) {
-        foreach($this->headersTable as $header) {
-          $cell = $form_state->getValue();
+
+  }
+
+  public function validateCell(array &$form, FormStateInterface $form_state) {
+    $response = new AjaxResponse()
+
+    $arrCell = [];
+    $arrData = [];
+    $arrNull = [];
+    for ($table = 0; $table <= $this->countTable; $table++) {
+      $startDataCell = FALSE;
+      $endDataCell = FALSE;
+      for ($row = 0; $row <= $this->countRows; $row++) {
+        foreach($this->cellData as $colKey) {
+          $key = 'col-' . $colKey . '-row-' . $row . '-from-' . $table;
+          $cell = $form_state->getValue($key);
+
+          // Search first not null cell.
+          if (!empty($cell) && !$startDataCell) {
+            $arrData[$key] = $cell;
+            $startDataCell = TRUE;
+          }
+
+          // Search end not null cell.
+          if (empty($cell) && !$endDataCell && $startDataCell) {
+            $endDataCell = TRUE;
+            $arrNull[$key] = NULL;
+          }
+
+          // Search other null cell in array.
+          if (empty($cell) && $endDataCell && $startDataCell) {
+            $arrNull[$key] = $cell;
+          }
+
+          if (!empty($cell) && $endDataCell) {
+
+          }
+
+          if (!empty($cell) && ) {
+            $endDataCell = TRUE;
+
+          }
+
+
         }
       }
+
     }
+    return $response->addCommand(new HtmlCommand('#deku-result', var_dump($arrData)));
   }
 
   /**
    * Create table from headers and rows.
    */
   public function createTable(array &$form, FormStateInterface $form_state) {
-
     // Set value to the variables.
     $this->generateHeaderTable();
-
-    for ($i = 1; $i <= $this->countTable; $i++) {
-      $tableKey = 'table-' . $i;
+    for ($id = 0; $id < $this->countTable; $id++) {
+      $tableKey = 'table-' . $id;
       $form[$tableKey] = [
         '#type' => 'table',
-        '#tree' => TRUE,
+        '#tree' => FALSE,
         '#header' => $this->headersTable,
       ];
-      $this->createYears($form[$tableKey], $form_state);
+      $this->createYears($id, $form[$tableKey], $form_state);
     }
   }
 
   public function addTable(array &$form, FormStateInterface $form_state): array {
-    $this->countTable++;
+    $this->countTable = $form_state->getValue('tableCount') + 1;
     $form_state->setRebuild();
     return $form;
   }
 
-  public function createYears(array &$table, FormStateInterface $form_state) {
-    for ($i = 1; $i <= $this->countRows; $i++) {
+  public function createYears(int $tableKey, array &$table, FormStateInterface $form_state) {
+    for ($row = 0; $row < $this->countRows; $row++) {
 
-      foreach ($this->headersTable as $rowKey => $rowName) {
-        $table[$i][$rowKey] = [
+      foreach ($this->headersTable as $colKey => $colName) {
+
+        $cellKey = 'col-' . $colKey . '-row-' . $row . '-from-' . $tableKey;
+        $table[$row][$cellKey] = [
           '#type' => 'number',
           '#step' => '0.01',
         ];
-        if (!array_key_exists($rowKey, $this->cellData)) {
+        if (!in_array($colKey, $this->cellData)) {
           $defaultValue = 1;
-          $table[$i][$rowKey] = [
+          $table[$row][$cellKey] = [
+            '#type' => 'number',
             '#disabled' => TRUE,
             '#default_value' => round($defaultValue, 2),
           ];
         }
+        if ($colKey == 'year') {
+          $table[$row][$cellKey]['#default_value'] = date('Y') - $row;
+        }
+
       }
-      $table[$i]['year']['#default_value'] = date('Y') - $i;
+
     }
   }
 
   public function addYears(array $form, FormStateInterface $form_state): array {
-    $this->countRows++;
+    $this->countRows = $form_state->getValue('rowCount') + 1;
     $form_state->setRebuild();
     return $form;
   }
