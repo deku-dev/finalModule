@@ -177,45 +177,22 @@ class SettingsForm extends ConfigFormBase {
   }
 
   public function validateCell(array &$form, FormStateInterface $form_state) {
-    $response = new AjaxResponse()
+    $response = new AjaxResponse();
 
     $arrCell = [];
     $arrData = [];
     $arrNull = [];
     for ($table = 0; $table <= $this->countTable; $table++) {
-      $startDataCell = FALSE;
-      $endDataCell = FALSE;
       for ($row = 0; $row <= $this->countRows; $row++) {
         foreach($this->cellData as $colKey) {
           $key = 'col-' . $colKey . '-row-' . $row . '-from-' . $table;
-          $cell = $form_state->getValue($key);
-
-          // Search first not null cell.
-          if (!empty($cell) && !$startDataCell) {
-            $arrData[$key] = $cell;
-            $startDataCell = TRUE;
+          $cellValue = $form_state->hasValue($key);
+          if (!$table) {
+            
           }
-
-          // Search end not null cell.
-          if (empty($cell) && !$endDataCell && $startDataCell) {
-            $endDataCell = TRUE;
-            $arrNull[$key] = NULL;
+          else {
+            $arrCell[$key] = !$cellValue ? NULL : TRUE;
           }
-
-          // Search other null cell in array.
-          if (empty($cell) && $endDataCell && $startDataCell) {
-            $arrNull[$key] = $cell;
-          }
-
-          if (!empty($cell) && $endDataCell) {
-
-          }
-
-          if (!empty($cell) && ) {
-            $endDataCell = TRUE;
-
-          }
-
 
         }
       }
