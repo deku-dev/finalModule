@@ -173,32 +173,65 @@ class SettingsForm extends ConfigFormBase {
    * {@inheritdoc}
    */
   public function validateForm(array &$form, FormStateInterface $form_state) {
+    $this->validateCell($form, $form_state);
+  }
 
+  /**
+   * Filter array and search key not valid cells.
+   *
+   * @param mixed[] $arrCell
+   *   Array cells with not null first cell.
+   * @return string[]
+   *   An array of the keys of the cells which are not valid(must be filled).
+   */
+  protected function filterArrayCell(array $arrCell) {
+    $endDataKey = array_search(array_reverse($arrCell));
+    $arrRes = [];
+    foreach ($arrCell as $key => $value) {
+      if ($key == $endDataKey) {
+        break;
+      }
+      if (is_null($value)) {
+        array_push($arrRes, $key);
+      }
+    }
+    return $arrRes;
   }
 
   public function validateCell(array &$form, FormStateInterface $form_state) {
-    $response = new AjaxResponse();
 
+    /**
+     * @todo Need fix some coding standart bugs and code review.
+     */
     $arrCell = [];
-    $arrData = [];
-    $arrNull = [];
+    $firstDataCell = FALSE;
     for ($table = 0; $table <= $this->countTable; $table++) {
       for ($row = 0; $row <= $this->countRows; $row++) {
         foreach($this->cellData as $colKey) {
           $key = 'col-' . $colKey . '-row-' . $row . '-from-' . $table;
           $cellValue = $form_state->hasValue($key);
-          if (!$table) {
-            
+          if ($table && $cellValue) {
+            if (array_key_exists($key, $arrCell) && !$arrCell['key']) {
+              $form_state->setErrorByName(
+                $key,
+                'Tables should be similar'
+              );
+              continue;
+            }
           }
-          else {
+          if ($firstDataCell) {
             $arrCell[$key] = !$cellValue ? NULL : TRUE;
           }
-
+          if (!$firstDataCell && $cellValue) {
+            $arrCell[$key] = TRUE;
+            $firstDataCell = TRUE;
+          }
         }
       }
-
     }
-    return $response->addCommand(new HtmlCommand('#deku-result', var_dump($arrData)));
+    foreach ($this->filterArrayCell($arrCell) as $keyCell) {
+      $form_state->setErrorByName($value, 'Table should not contain breaks');
+    }
   }
 
   /**
@@ -261,22 +294,49 @@ class SettingsForm extends ConfigFormBase {
    * {@inheritdoc}
    */
   public function submitForm(array &$form, FormStateInterface $form_state) {
-    $valuesTable = $form_state->getValues();
-    foreach($valuesTable as $tableKey => $table){
-      foreach ($table as $key => $row) {
-        $q1 = ($row['jan'] + $row['feb'] + $row['mar'] + 1) / 3;
-        $q2 = ($row['apr'] + $row['may'] + $row['jun'] + 1) / 3;
-        $q3 = ($row['jul'] + $row['aug'] + $row['sep'] + 1) / 3;
-        $q4 = ($row['oct'] + $row['nov'] + $row['dec'] + 1) / 3;
+    for ($table = 0; $table <= $this->countTable; $table++) {
+      for ($row = 0; $row <= $this->countRows; $row++) {
+
+        $p1 = 'col-';
+        $p2 = '-row-' . $row . '-from-' . $table;
+
+        $cellKey = 'col-' . $colKey . '-row-' . $row . '-from-' . $table;
+        $q1 = ($p1.'jan'.$p2 + $p1.'feb'.$p2 + $p1.'mar'.$p2 + 1) / 3;
+        $q2 = ($p1.'apr'.$p2 + $p1.'may'.$p2 + $p1.'jun'.$p2 + 1) / 3;
+        $q3 = ($p1.'jul'.$p2 + $p1.'aug'.$p2 + $p1.'sep'.$p2 + 1) / 3;
+        $q4 = ($p1.'oct'.$p2 + $p1.'nov'.$p2 + $p1.'dec'.$p2 + 1) / 3;
         $ytd = ($q1 + $q2 + $q3 + $q4 + 1) / 4;
+        /**
+         * @todo Add save to form values and rebuild form.
+         */
       }
     }
+
     // $this->config('deku.settings')
     //   ->set('example', $form_state->getValue('example'))
     //   ->save();
     $this->messenger->addStatus('All cell is valid');
 
 
+  }
+
+  protected function calculateCells($keyTableRow, array &$form, FormStateInterface $form_state){
+    /**
+     * @todo Need finish dev this function. Add calculate result values.
+     */
+    $arrValue = [];
+    foreach ($this->cellData as $month) {
+      $keyFull = 'col-' . $month . $keyTableRow;
+      $arrValue[$keyFull] = $form_state->getValue($keyFull);
+    }
+
+    return [
+      'q1' => (''),
+      'q2' => '',
+      'q3' => '',
+      'q4' => '',
+      'ytd' => '',
+    ];
   }
 
   public function reloadAjaxTable(array &$form, FormStateInterface $form_state): array {
