@@ -19,7 +19,7 @@ class SettingsForm extends ConfigFormBase {
    *
    * @var int
    */
-  public int $countTable = 0;
+  public int $countTable = 1;
 
   /**
    * Count rows in one table.
@@ -76,7 +76,7 @@ class SettingsForm extends ConfigFormBase {
       'ytd' => $this->t('YTD'),
     ];
 
-    // Key cell of calculated data.
+    // Key cell for calculated data.
     $this->cellData = [
       'jan', 'feb', 'mar',
       'apr', 'may', 'jun',
@@ -161,7 +161,7 @@ class SettingsForm extends ConfigFormBase {
       '#type' => 'submit',
       '#value' => $this->t('Submit'),
       '#ajax' => [
-        'callback' => '::validateCell',
+        'callback' => '::reloadAjaxTable',
         'wrapper' => 'deku-form',
       ]
     ];
@@ -173,65 +173,64 @@ class SettingsForm extends ConfigFormBase {
    * {@inheritdoc}
    */
   public function validateForm(array &$form, FormStateInterface $form_state) {
-    $this->validateCell($form, $form_state);
-  }
-
-  /**
-   * Filter array and search key not valid cells.
-   *
-   * @param mixed[] $arrCell
-   *   Array cells with not null first cell.
-   * @return string[]
-   *   An array of the keys of the cells which are not valid(must be filled).
-   */
-  protected function filterArrayCell(array $arrCell) {
-    $endDataKey = array_search(array_reverse($arrCell));
-    $arrRes = [];
-    foreach ($arrCell as $key => $value) {
-      if ($key == $endDataKey) {
-        break;
-      }
-      if (is_null($value)) {
-        array_push($arrRes, $key);
-      }
-    }
-    return $arrRes;
-  }
-
-  public function validateCell(array &$form, FormStateInterface $form_state) {
-
     /**
-     * @todo Need fix some coding standart bugs and code review.
+     * @todo Need fix some coding standard bugs and code review.
      */
     $arrCell = [];
     $firstDataCell = FALSE;
     for ($table = 0; $table <= $this->countTable; $table++) {
       for ($row = 0; $row <= $this->countRows; $row++) {
         foreach($this->cellData as $colKey) {
-          $key = 'col-' . $colKey . '-row-' . $row . '-from-' . $table;
-          $cellValue = $form_state->hasValue($key);
-          if ($table && $cellValue) {
-            if (array_key_exists($key, $arrCell) && !$arrCell['key']) {
-              $form_state->setErrorByName(
-                $key,
-                'Tables should be similar'
-              );
-              continue;
+          $key = 'col-' . $colKey . '-row-' . $row . '-from-';
+          $cellValue = !empty($form_state->getValue($key . $table));
+          if ($table != 0) {
+            if ($arrCell[$key . '0'] != $cellValue) {
+              if (!array_key_exists($key . '0', $arrCell) && $cellValue) {
+                $form_state->setErrorByName(
+                  $key . $table,
+                  'Tables should be similar'
+                );
+              }
+              
             }
+            continue;
           }
           if ($firstDataCell) {
-            $arrCell[$key] = !$cellValue ? NULL : TRUE;
+            $arrCell[$key . $table] = $cellValue;
           }
           if (!$firstDataCell && $cellValue) {
-            $arrCell[$key] = TRUE;
+            $arrCell[$key . $table] = TRUE;
             $firstDataCell = TRUE;
           }
         }
       }
     }
     foreach ($this->filterArrayCell($arrCell) as $keyCell) {
-      $form_state->setErrorByName($value, 'Table should not contain breaks');
+      $form_state->setErrorByName($keyCell, 'Table should not contain breaks');
     }
+  }
+
+  /**
+   * Filter array and search key not valid cells.
+   *
+   * @param array $arrCell
+   *   Array cells with not null first cell.
+   * @return string[]
+   *   An array of the keys of the cells which are not valid(must be filled).
+   */
+  protected function filterArrayCell(array $arrCell) {
+
+    $endDataKey = array_search(TRUE, array_reverse($arrCell));
+    $arrRes = [];
+    foreach ($arrCell as $key => $value) {
+      if ($key == $endDataKey) {
+        break;
+      }
+      if (!$value) {
+        $arrRes[] = $key;
+      }
+    }
+    return $arrRes;
   }
 
   /**
@@ -297,25 +296,21 @@ class SettingsForm extends ConfigFormBase {
     for ($table = 0; $table <= $this->countTable; $table++) {
       for ($row = 0; $row <= $this->countRows; $row++) {
 
-        $p1 = 'col-';
-        $p2 = '-row-' . $row . '-from-' . $table;
+        $keyPart2 = '-row-' . $row . '-from-' . $table;
 
-        $cellKey = 'col-' . $colKey . '-row-' . $row . '-from-' . $table;
-        $q1 = ($p1.'jan'.$p2 + $p1.'feb'.$p2 + $p1.'mar'.$p2 + 1) / 3;
-        $q2 = ($p1.'apr'.$p2 + $p1.'may'.$p2 + $p1.'jun'.$p2 + 1) / 3;
-        $q3 = ($p1.'jul'.$p2 + $p1.'aug'.$p2 + $p1.'sep'.$p2 + 1) / 3;
-        $q4 = ($p1.'oct'.$p2 + $p1.'nov'.$p2 + $p1.'dec'.$p2 + 1) / 3;
-        $ytd = ($q1 + $q2 + $q3 + $q4 + 1) / 4;
-        /**
-         * @todo Add save to form values and rebuild form.
-         */
+        $calcRes = $this->calculateCells($p2, $form, $form_state);
+
+        foreach ($calcRes as $key => $res) {
+          $form_state->setValue('col-' . $key . $keyPart2, $calcRes);
+        }
       }
     }
 
     // $this->config('deku.settings')
     //   ->set('example', $form_state->getValue('example'))
     //   ->save();
-    $this->messenger->addStatus('All cell is valid');
+    $this->messenger->addStatus('Valid');
+    $form_state->setRebuild();
 
 
   }
@@ -324,18 +319,23 @@ class SettingsForm extends ConfigFormBase {
     /**
      * @todo Need finish dev this function. Add calculate result values.
      */
-    $arrValue = [];
+    $cell = [];
     foreach ($this->cellData as $month) {
       $keyFull = 'col-' . $month . $keyTableRow;
-      $arrValue[$keyFull] = $form_state->getValue($keyFull);
+      $arrValue[$month] = $form_state->getValue($keyFull);
     }
 
+    $q1 = ($cell['jan'] + $cell['feb'] + $cell['mar'] + 1) / 3;
+    $q2 = ($cell['apr'] + $cell['may'] + $cell['jun'] + 1) / 3;
+    $q3 = ($cell['jul'] + $cell['aug'] + $cell['sep'] + 1) / 3;
+    $q4 = ($cell['oct'] + $cell['nov'] + $cell['dec'] + 1) / 3;
+
     return [
-      'q1' => (''),
-      'q2' => '',
-      'q3' => '',
-      'q4' => '',
-      'ytd' => '',
+      'q1' => $q1,
+      'q2' => $q2,
+      'q3' => $q3,
+      'q4' => $q4,
+      'ytd' => ($q1 + $q2 + $q3 + $q3 + 1) / 4,
     ];
   }
 
