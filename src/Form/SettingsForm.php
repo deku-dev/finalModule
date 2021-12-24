@@ -38,7 +38,7 @@ class SettingsForm extends ConfigFormBase {
   /**
    * Array for cell with start data and end data.
    *
-   * @var float[]
+   * @var string[]
    */
   private array $arrData;
 
@@ -99,7 +99,7 @@ class SettingsForm extends ConfigFormBase {
   /**
    * {@inheritdoc}
    */
-  public function getFormId(): string {
+  public function getFormId() {
     return 'deku_settings';
   }
 
@@ -151,10 +151,6 @@ class SettingsForm extends ConfigFormBase {
       ]
     ];
 
-
-    // Set value to the variables.
-    // $this->generateHeaderTable();
-
     $this->createTable($form, $form_state);
 
     $form['submit'] = [
@@ -173,71 +169,96 @@ class SettingsForm extends ConfigFormBase {
    * {@inheritdoc}
    */
   public function validateForm(array &$form, FormStateInterface $form_state) {
-    /**
-     * @todo Need fix some coding standard bugs and code review.
-     */
+    
+    // Save cells from the first not empty to end. 
     $arrCell = [];
     $firstDataCell = FALSE;
+
     for ($table = 0; $table <= $this->countTable; $table++) {
+      $tableTrue = [];
       for ($row = 0; $row <= $this->countRows; $row++) {
         foreach($this->cellData as $colKey) {
+
+          // Key without table number.
           $key = 'col-' . $colKey . '-row-' . $row . '-from-';
+
+          // Using the function hasValue() does not produce a good result.
           $cellValue = !empty($form_state->getValue($key . $table));
+
           if ($table != 0) {
-            if ($arrCell[$key . '0'] != $cellValue) {
-              if (!array_key_exists($key . '0', $arrCell) && $cellValue) {
-                $form_state->setErrorByName(
-                  $key . $table,
-                  'Tables should be similar'
-                );
-              }
-              
+            // If the first non-empty value is not found, then there is no data.
+            if (!$firstDataCell) {
+              $this->messenger->addWarning('The table cannot be empty.');
+              break;
+            }
+            if ($cellValue) {
+              $tableTrue[] = $key . '0';
             }
             continue;
           }
+
           if ($firstDataCell) {
             $arrCell[$key . $table] = $cellValue;
           }
+          // Search first data cell.
           if (!$firstDataCell && $cellValue) {
             $arrCell[$key . $table] = TRUE;
             $firstDataCell = TRUE;
           }
         }
       }
-    }
-    foreach ($this->filterArrayCell($arrCell) as $keyCell) {
-      $form_state->setErrorByName($keyCell, 'Table should not contain breaks');
-    }
+
+      // Search empty cells in array between not empty cells.
+      if ($table == 0) {
+        $res = $this->filterArrayCell($arrCell);
+        $this->arrData = $res['1'];
+        foreach ($res['0'] as $keyCell) {
+          $form_state->setErrorByName($keyCell, 'Table should not contain breaks.');
+        }
+      }
+
+      // Finding array difference in tables.
+      if ($table != 0) {
+        foreach (array_diff($this->arrData, $tableTrue) as $nameCell) {
+          $form_state->setErrorByName($nameCell, 'Tables should be similar.');
+        }
+      }
+    } 
   }
 
   /**
-   * Filter array and search key not valid cells.
+   * Filtering empty and non-empty cells into diffent arrays.
    *
    * @param array $arrCell
    *   Array cells with not null first cell.
+   *
    * @return string[]
-   *   An array of the keys of the cells which are not valid(must be filled).
+   *   Two arrays with empty and non-empty values.
    */
   protected function filterArrayCell(array $arrCell) {
 
     $endDataKey = array_search(TRUE, array_reverse($arrCell));
-    $arrRes = [];
+    $arrFalse = [];
+    $arrTrue = [];
     foreach ($arrCell as $key => $value) {
       if ($key == $endDataKey) {
         break;
       }
       if (!$value) {
-        $arrRes[] = $key;
+        $arrFalse[] = $key;
+      }
+      else {
+        $arrTrue[] = $key;
       }
     }
-    return $arrRes;
+    return ['0' => [$arrFalse], '1' => [$arrTrue]];
   }
 
   /**
    * Create table from headers and rows.
    */
   public function createTable(array &$form, FormStateInterface $form_state) {
-    // Set value to the variables.
+
     $this->generateHeaderTable();
     for ($id = 0; $id < $this->countTable; $id++) {
       $tableKey = 'table-' . $id;
@@ -250,12 +271,9 @@ class SettingsForm extends ConfigFormBase {
     }
   }
 
-  public function addTable(array &$form, FormStateInterface $form_state): array {
-    $this->countTable = $form_state->getValue('tableCount') + 1;
-    $form_state->setRebuild();
-    return $form;
-  }
-
+  /**
+   * Render rows tables.
+   */
   public function createYears(int $tableKey, array &$table, FormStateInterface $form_state) {
     for ($row = 0; $row < $this->countRows; $row++) {
 
@@ -266,6 +284,8 @@ class SettingsForm extends ConfigFormBase {
           '#type' => 'number',
           '#step' => '0.01',
         ];
+
+        // For calculated values.
         if (!in_array($colKey, $this->cellData)) {
           $defaultValue = 1;
           $table[$row][$cellKey] = [
@@ -274,17 +294,28 @@ class SettingsForm extends ConfigFormBase {
             '#default_value' => round($defaultValue, 2),
           ];
         }
+
         if ($colKey == 'year') {
           $table[$row][$cellKey]['#default_value'] = date('Y') - $row;
         }
-
       }
-
     }
   }
 
-  public function addYears(array $form, FormStateInterface $form_state): array {
+  /**
+   * Increment count rows in tables.
+   */
+  public function addYears(array $form, FormStateInterface $form_state) {
     $this->countRows = $form_state->getValue('rowCount') + 1;
+    $form_state->setRebuild();
+    return $form;
+  }
+
+  /**
+   * Increment count tables
+   */
+  public function addTable(array &$form, FormStateInterface $form_state) {
+    $this->countTable = $form_state->getValue('tableCount') + 1;
     $form_state->setRebuild();
     return $form;
   }
@@ -301,20 +332,23 @@ class SettingsForm extends ConfigFormBase {
         $calcRes = $this->calculateCells($p2, $form, $form_state);
 
         foreach ($calcRes as $key => $res) {
-          $form_state->setValue('col-' . $key . $keyPart2, $calcRes);
+          $form_state->setValue('col-' . $key . $keyPart2, $res);
         }
       }
     }
-
-    // $this->config('deku.settings')
-    //   ->set('example', $form_state->getValue('example'))
-    //   ->save();
-    $this->messenger->addStatus('Valid');
+    $this->messenger->addStatus('Valid.');
     $form_state->setRebuild();
-
-
   }
 
+  /**
+   * Calculate value cells.
+   * 
+   * @param string $keyTableRow
+   *   Two part key name cell without month.
+   * 
+   * @return float[]
+   *   Result calculated value cells.
+   */
   protected function calculateCells($keyTableRow, array &$form, FormStateInterface $form_state){
     /**
      * @todo Need finish dev this function. Add calculate result values.
@@ -339,7 +373,10 @@ class SettingsForm extends ConfigFormBase {
     ];
   }
 
-  public function reloadAjaxTable(array &$form, FormStateInterface $form_state): array {
+  /**
+   * Reload table form via ajax.
+   */
+  public function reloadAjaxTable(array &$form, FormStateInterface $form_state) {
     return $form;
   }
 
