@@ -6,8 +6,6 @@ use Drupal\Core\Form\FormStateInterface;
 use Drupal\Core\Form\FormBase;
 use Drupal\Core\Form\ConfigFormBase;
 use Symfony\Component\DependencyInjection\ContainerInterface;
-use Drupal\Core\Ajax\AjaxResponse;
-use Drupal\Core\Ajax\HtmlCommand;
 
 /**
  * Configure deku settings for this site.
@@ -36,7 +34,7 @@ class SettingsForm extends ConfigFormBase {
   protected array $headersTable;
 
   /**
-   * Array for cell with start data and end data.
+   * Array with non-empty key cells for first table.
    *
    * @var string[]
    */
@@ -180,6 +178,7 @@ class SettingsForm extends ConfigFormBase {
     $firstDataCell = FALSE;
 
     for ($table = 0; $table < $this->countTable; $table++) {
+      // Array with not empty cell names.
       $tableTrue = [];
       for ($row = 0; $row < $this->countRows; $row++) {
         foreach($this->cellData as $colKey) {
@@ -216,7 +215,10 @@ class SettingsForm extends ConfigFormBase {
         $emptyCells = $this->filterArrayCell($arrCell);
         $this->arrData = $tableTrue;
         foreach ($emptyCells as $keyCell) {
-          $form_state->setErrorByName($keyCell, 'Table should not contain breaks.');
+          $form_state->setErrorByName(
+            $keyCell,
+            'Table should not contain breaks.'
+          );
         }
       }
 
@@ -360,16 +362,18 @@ class SettingsForm extends ConfigFormBase {
    */
   protected function calculateCells(string $keyTableRow, array &$form, FormStateInterface $form_state) {
 
+    // Array values with key month.
     $cell = [];
+    // Add month key and get value from cell.
     foreach ($this->cellData as $month) {
       $keyFull = 'col-' . $month . $keyTableRow;
-      $cell[$month] = $form_state->getValue($keyFull);
+      $cell[$month] = (int) $form_state->getValue($keyFull);
     }
 
-    $q1 = ((int) $cell['jan'] + (int) $cell['feb'] + (int) $cell['mar'] + 1) / 3;
-    $q2 = ((int) $cell['apr'] + (int) $cell['may'] + (int) $cell['jun'] + 1) / 3;
-    $q3 = ((int) $cell['jul'] + (int) $cell['aug'] + (int) $cell['sep'] + 1) / 3;
-    $q4 = ((int) $cell['oct'] + (int) $cell['nov'] + (int) $cell['dec'] + 1) / 3;
+    $q1 = ($cell['jan'] + $cell['feb'] + $cell['mar'] + 1) / 3;
+    $q2 = ($cell['apr'] + $cell['may'] + $cell['jun'] + 1) / 3;
+    $q3 = ($cell['jul'] + $cell['aug'] + $cell['sep'] + 1) / 3;
+    $q4 = ($cell['oct'] + $cell['nov'] + $cell['dec'] + 1) / 3;
 
     return [
       'q1' => $q1,
