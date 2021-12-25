@@ -1,0 +1,9 @@
+.cell_table{
+  width: 100%;
+}
+.table_form td{
+  padding: 0;
+}
+.table_form th{
+  text-align: center;
+}

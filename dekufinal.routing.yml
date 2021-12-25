@@ -1,15 +1,7 @@
-dekufinal.example:
-  path: '/dekufinal/example'
-  defaults:
-    _title: 'Example'
-    _controller: '\Drupal\dekufinal\Controller\DekufinalController::build'
-  requirements:
-    _permission: 'access content'
-
 dekufinal.settings_form:
-  path: '/dekufinal'
+  path: "/dekufinal"
   defaults:
-    _title: 'DekuFinal settings'
+    _title: "DekuFinal table"
     _form: 'Drupal\dekufinal\Form\SettingsForm'
   requirements:
-    _permission: 'access content'
+    _permission: "access content"

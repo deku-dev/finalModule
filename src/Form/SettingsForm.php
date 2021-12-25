@@ -116,6 +116,9 @@ class SettingsForm extends ConfigFormBase {
    * {@inheritdoc}
    */
   public function buildForm(array $form, FormStateInterface $form_state) {
+
+
+
     $form['#prefix'] = '<div id="deku-form">';
     $form['#suffix'] = '</div>';
 
@@ -161,6 +164,8 @@ class SettingsForm extends ConfigFormBase {
         'wrapper' => 'deku-form',
       ]
     ];
+
+    $form['#attached']['library'][] = 'dekufinal/dekufinal';
     return $form;
 
   }
@@ -169,14 +174,14 @@ class SettingsForm extends ConfigFormBase {
    * {@inheritdoc}
    */
   public function validateForm(array &$form, FormStateInterface $form_state) {
-    
-    // Save cells from the first not empty to end. 
+
+    // Save cells from the first not empty to end.
     $arrCell = [];
     $firstDataCell = FALSE;
 
-    for ($table = 0; $table <= $this->countTable; $table++) {
+    for ($table = 0; $table < $this->countTable; $table++) {
       $tableTrue = [];
-      for ($row = 0; $row <= $this->countRows; $row++) {
+      for ($row = 0; $row < $this->countRows; $row++) {
         foreach($this->cellData as $colKey) {
 
           // Key without table number.
@@ -185,16 +190,9 @@ class SettingsForm extends ConfigFormBase {
           // Using the function hasValue() does not produce a good result.
           $cellValue = !empty($form_state->getValue($key . $table));
 
-          if ($table != 0) {
-            // If the first non-empty value is not found, then there is no data.
-            if (!$firstDataCell) {
-              $this->messenger->addWarning('The table cannot be empty.');
-              break;
-            }
-            if ($cellValue) {
-              $tableTrue[] = $key . '0';
-            }
-            continue;
+
+          if ($cellValue) {
+            $tableTrue[] = $key;
           }
 
           if ($firstDataCell) {
@@ -207,27 +205,34 @@ class SettingsForm extends ConfigFormBase {
           }
         }
       }
+      // If the first non-empty value is not found, then there is no data.
+      if (!$firstDataCell) {
+        $this->messenger->addWarning('The table cannot be empty.');
+        break;
+      }
 
       // Search empty cells in array between not empty cells.
       if ($table == 0) {
-        $res = $this->filterArrayCell($arrCell);
-        $this->arrData = $res['1'];
-        foreach ($res['0'] as $keyCell) {
+        $emptyCells = $this->filterArrayCell($arrCell);
+        $this->arrData = $tableTrue;
+        foreach ($emptyCells as $keyCell) {
           $form_state->setErrorByName($keyCell, 'Table should not contain breaks.');
         }
       }
 
       // Finding array difference in tables.
       if ($table != 0) {
-        foreach (array_diff($this->arrData, $tableTrue) as $nameCell) {
+        $different = array_diff($this->arrData, $tableTrue);
+        foreach ($different as $nameCell) {
+          $nameCell = $nameCell . $table;
           $form_state->setErrorByName($nameCell, 'Tables should be similar.');
         }
       }
-    } 
+    }
   }
 
   /**
-   * Filtering empty and non-empty cells into diffent arrays.
+   * Filtering empty and non-empty cells into different arrays.
    *
    * @param array $arrCell
    *   Array cells with not null first cell.
@@ -239,19 +244,15 @@ class SettingsForm extends ConfigFormBase {
 
     $endDataKey = array_search(TRUE, array_reverse($arrCell));
     $arrFalse = [];
-    $arrTrue = [];
     foreach ($arrCell as $key => $value) {
-      if ($key == $endDataKey) {
-        break;
-      }
       if (!$value) {
         $arrFalse[] = $key;
       }
-      else {
-        $arrTrue[] = $key;
+      if ($key == $endDataKey) {
+        return $arrFalse;
       }
     }
-    return ['0' => [$arrFalse], '1' => [$arrTrue]];
+
   }
 
   /**
@@ -266,6 +267,11 @@ class SettingsForm extends ConfigFormBase {
         '#type' => 'table',
         '#tree' => FALSE,
         '#header' => $this->headersTable,
+        '#attributes' => [
+          'class' => [
+            'table_form',
+          ],
+        ],
       ];
       $this->createYears($id, $form[$tableKey], $form_state);
     }
@@ -283,16 +289,18 @@ class SettingsForm extends ConfigFormBase {
         $table[$row][$cellKey] = [
           '#type' => 'number',
           '#step' => '0.01',
+          '#attributes' => [
+            'class' => [
+              'cell_table',
+            ],
+          ],
         ];
 
         // For calculated values.
         if (!in_array($colKey, $this->cellData)) {
-          $defaultValue = 1;
-          $table[$row][$cellKey] = [
-            '#type' => 'number',
-            '#disabled' => TRUE,
-            '#default_value' => round($defaultValue, 2),
-          ];
+          $defaultValue = $form_state->getValue($cellKey, 0);
+          $table[$row][$cellKey]['#disabled'] = TRUE;
+          $table[$row][$cellKey]['#default_value'] = round($defaultValue, 2);
         }
 
         if ($colKey == 'year') {
@@ -328,9 +336,10 @@ class SettingsForm extends ConfigFormBase {
       for ($row = 0; $row <= $this->countRows; $row++) {
 
         $keyPart2 = '-row-' . $row . '-from-' . $table;
+        // Calculate result in other function.
+        $calcRes = $this->calculateCells($keyPart2, $form, $form_state);
 
-        $calcRes = $this->calculateCells($p2, $form, $form_state);
-
+        // Save result values to form cell.
         foreach ($calcRes as $key => $res) {
           $form_state->setValue('col-' . $key . $keyPart2, $res);
         }
@@ -342,27 +351,25 @@ class SettingsForm extends ConfigFormBase {
 
   /**
    * Calculate value cells.
-   * 
+   *
    * @param string $keyTableRow
    *   Two part key name cell without month.
-   * 
+   *
    * @return float[]
    *   Result calculated value cells.
    */
-  protected function calculateCells($keyTableRow, array &$form, FormStateInterface $form_state){
-    /**
-     * @todo Need finish dev this function. Add calculate result values.
-     */
+  protected function calculateCells(string $keyTableRow, array &$form, FormStateInterface $form_state) {
+
     $cell = [];
     foreach ($this->cellData as $month) {
       $keyFull = 'col-' . $month . $keyTableRow;
-      $arrValue[$month] = $form_state->getValue($keyFull);
+      $cell[$month] = $form_state->getValue($keyFull);
     }
 
-    $q1 = ($cell['jan'] + $cell['feb'] + $cell['mar'] + 1) / 3;
-    $q2 = ($cell['apr'] + $cell['may'] + $cell['jun'] + 1) / 3;
-    $q3 = ($cell['jul'] + $cell['aug'] + $cell['sep'] + 1) / 3;
-    $q4 = ($cell['oct'] + $cell['nov'] + $cell['dec'] + 1) / 3;
+    $q1 = ((int) $cell['jan'] + (int) $cell['feb'] + (int) $cell['mar'] + 1) / 3;
+    $q2 = ((int) $cell['apr'] + (int) $cell['may'] + (int) $cell['jun'] + 1) / 3;
+    $q3 = ((int) $cell['jul'] + (int) $cell['aug'] + (int) $cell['sep'] + 1) / 3;
+    $q4 = ((int) $cell['oct'] + (int) $cell['nov'] + (int) $cell['dec'] + 1) / 3;
 
     return [
       'q1' => $q1,
