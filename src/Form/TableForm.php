@@ -4,13 +4,12 @@ namespace Drupal\dekufinal\Form;
 
 use Drupal\Core\Form\FormStateInterface;
 use Drupal\Core\Form\FormBase;
-use Drupal\Core\Form\ConfigFormBase;
 use Symfony\Component\DependencyInjection\ContainerInterface;
 
 /**
  * Configure deku settings for this site.
  */
-class SettingsForm extends ConfigFormBase {
+class TableForm extends FormBase {
 
   /**
    * Count all created table on the page.
@@ -50,7 +49,7 @@ class SettingsForm extends ConfigFormBase {
   /**
    * Set key and name headers table.
    */
-  public function generateHeaderTable () {
+  private function generateHeaderTable() {
 
     // Key cell of table.
     $this->headersTable = [
@@ -86,13 +85,11 @@ class SettingsForm extends ConfigFormBase {
   /**
    * {@inheritdoc}
    */
-  public static function create(ContainerInterface $container): SettingsForm {
+  public static function create(ContainerInterface $container): TableForm {
     $instance = parent::create($container);
     $instance->setMessenger($container->get('messenger'));
     return $instance;
   }
-
-
 
   /**
    * {@inheritdoc}
@@ -115,13 +112,13 @@ class SettingsForm extends ConfigFormBase {
    */
   public function buildForm(array $form, FormStateInterface $form_state) {
 
-
-
+    // Wrapper for form fields.
     $form['#prefix'] = '<div id="deku-form">';
     $form['#suffix'] = '</div>';
 
+    // For result message validation.
     $form['result'] = [
-      '#markup' => '<div id="deku-result"></div>'
+      '#markup' => '<div id="deku-result"></div>',
     ];
 
     $form['rowCount'] = [
@@ -137,19 +134,21 @@ class SettingsForm extends ConfigFormBase {
       '#type' => 'submit',
       '#value' => $this->t('Add year'),
       '#submit' => ['::addYears'],
+      '#limit_validation_errors' => [],
       '#ajax' => [
         'callback' => '::reloadAjaxTable',
         'wrapper' => 'deku-form',
-      ]
+      ],
     ];
     $form['addTable'] = [
       '#type' => 'submit',
       '#value' => $this->t('Add table'),
       '#submit' => ['::addTable'],
+      '#limit_validation_errors' => [],
       '#ajax' => [
         'callback' => '::reloadAjaxTable',
         'wrapper' => 'deku-form',
-      ]
+      ],
     ];
 
     $this->createTable($form, $form_state);
@@ -160,7 +159,7 @@ class SettingsForm extends ConfigFormBase {
       '#ajax' => [
         'callback' => '::reloadAjaxTable',
         'wrapper' => 'deku-form',
-      ]
+      ],
     ];
 
     $form['#attached']['library'][] = 'dekufinal/dekufinal';
@@ -181,14 +180,13 @@ class SettingsForm extends ConfigFormBase {
       // Array with not empty cell names.
       $tableTrue = [];
       for ($row = 0; $row < $this->countRows; $row++) {
-        foreach($this->cellData as $colKey) {
+        foreach ($this->cellData as $colKey) {
 
           // Key without table number.
           $key = 'col-' . $colKey . '-row-' . $row . '-from-';
 
           // Using the function hasValue() does not produce a good result.
-          $cellValue = !empty($form_state->getValue($key . $table));
-
+          $cellValue = $form_state->getValue($key . $table) != "";
 
           if ($cellValue) {
             $tableTrue[] = $key;
@@ -207,11 +205,12 @@ class SettingsForm extends ConfigFormBase {
       // If the first non-empty value is not found, then there is no data.
       if (!$firstDataCell) {
         $this->messenger->addWarning('The table cannot be empty.');
-        break;
       }
 
       // Search empty cells in array between not empty cells.
       if ($table == 0) {
+        // The search is carried out only in the first table,
+        // because the error in the others no longer matters.
         $emptyCells = $this->filterArrayCell($arrCell);
         $this->arrData = $tableTrue;
         foreach ($emptyCells as $keyCell) {
@@ -222,12 +221,38 @@ class SettingsForm extends ConfigFormBase {
         }
       }
 
-      // Finding array difference in tables.
+      // Finding array difference from first table.
       if ($table != 0) {
         $different = array_diff($this->arrData, $tableTrue);
         foreach ($different as $nameCell) {
           $nameCell = $nameCell . $table;
           $form_state->setErrorByName($nameCell, 'Tables should be similar.');
+        }
+        // Find difference from other tables.
+        $this->validateSimilar($tableTrue, $form_state);
+      }
+    }
+  }
+
+  /**
+   * Fetching cell key when not empty and comparison with other table cells.
+   *
+   * When cell is not empty, find empty cells in other tables.
+   *
+   * @param array $cells
+   *   Array with not empty key cells.
+   * @param \Drupal\Core\Form\FormStateInterface $form_state
+   *   Form state array.
+   */
+  private function validateSimilar(array $cells, FormStateInterface $form_state) {
+    foreach ($cells as $cell) {
+      for ($i = 0; $i < $this->countTable; $i++) {
+        $keyCell = $cell . $i;
+        if ($form_state->getValue($keyCell) === "") {
+          $form_state->setErrorByName(
+            $keyCell,
+            'Tables should be similar.'
+          );
         }
       }
     }
@@ -282,7 +307,7 @@ class SettingsForm extends ConfigFormBase {
   /**
    * Render rows tables.
    */
-  public function createYears(int $tableKey, array &$table, FormStateInterface $form_state) {
+  protected function createYears(int $tableKey, array &$table, FormStateInterface $form_state) {
     for ($row = 0; $row < $this->countRows; $row++) {
 
       foreach ($this->headersTable as $colKey => $colName) {
@@ -315,17 +340,17 @@ class SettingsForm extends ConfigFormBase {
   /**
    * Increment count rows in tables.
    */
-  public function addYears(array $form, FormStateInterface $form_state) {
-    $this->countRows = $form_state->getValue('rowCount') + 1;
+  public function addYears(array &$form, FormStateInterface $form_state) {
+    $this->countRows++;
     $form_state->setRebuild();
     return $form;
   }
 
   /**
-   * Increment count tables
+   * Increment count tables.
    */
   public function addTable(array &$form, FormStateInterface $form_state) {
-    $this->countTable = $form_state->getValue('tableCount') + 1;
+    $this->countTable++;
     $form_state->setRebuild();
     return $form;
   }
@@ -334,6 +359,7 @@ class SettingsForm extends ConfigFormBase {
    * {@inheritdoc}
    */
   public function submitForm(array &$form, FormStateInterface $form_state) {
+    // $this->validateTable($form, $form_state);
     for ($table = 0; $table <= $this->countTable; $table++) {
       for ($row = 0; $row <= $this->countRows; $row++) {
 
@@ -356,6 +382,10 @@ class SettingsForm extends ConfigFormBase {
    *
    * @param string $keyTableRow
    *   Two part key name cell without month.
+   * @param array $form
+   *   Form array.
+   * @param \Drupal\Core\Form\FormStateInterface $form_state
+   *   Form state array.
    *
    * @return float[]
    *   Result calculated value cells.

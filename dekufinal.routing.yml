@@ -2,6 +2,6 @@ dekufinal.settings_form:
   path: "/dekufinal"
   defaults:
     _title: "DekuFinal table"
-    _form: 'Drupal\dekufinal\Form\SettingsForm'
+    _form: 'Drupal\dekufinal\Form\TableForm'
   requirements:
     _permission: "access content"
